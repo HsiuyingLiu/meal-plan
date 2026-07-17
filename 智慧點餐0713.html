@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="h-full bg-stone-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>今天吃什麼 - 智慧點菜配餐系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Beautiful Noto Sans Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', -apple-system, sans-serif;
+            background-color: #f6f5f0;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f4f0ea;
+        }
+        ::-webkit-scrollbar-track:hover {
+            background: #ede8e0;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #dcd6cd;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #b8b0a5;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-stone-800">
+
+<header class="bg-[#822320] text-white shadow-md relative">
+    <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h1 class="text-4xl sm:text-5xl font-black tracking-tight drop-shadow-md">今天吃什麼</h1>
+                    <span class="bg-white/20 text-white text-xs font-bold px-2 py-0.5 rounded-full border border-white/30 backdrop-blur-sm shrink-0">v3.5 智慧拖曳排程版</span>
+                </div>
+                <p class="mt-1 text-stone-200 text-xl sm:text-2xl font-medium tracking-wide">智慧點菜配餐系統</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <label class="cursor-pointer bg-white/20 hover:bg-white/30 text-white font-bold py-2.5 px-4 rounded-lg border border-white/30 transition duration-150 flex items-center gap-1.5 text-base backdrop-blur-sm">
+                    <i class="fa-solid fa-file-csv"></i>
+                    <span>匯入菜單</span>
+                    <input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="handleCSVUpload(event)">
+                </label>
+                <button onclick="downloadBackup()" class="bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 px-4 rounded-lg border border-white/20 text-base transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-download"></i> <span>下載備份</span>
+                </button>
+                <label class="cursor-pointer bg-white/10 hover:bg-white/20 text-white font-bold py-2.5 px-4 rounded-lg border border-white/20 text-base transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-upload"></i> <span>讀取備份</span>
+                    <input type="file" id="backupFileInput" accept=".json" class="hidden" onchange="loadBackup(event)">
+                </label>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-3 sm:px-4 mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow pb-16">
+    
+    <!-- 左側配餐表 (col-span-7) -->
+    <section class="lg:col-span-7 space-y-5">
+        <!-- 抽籤面板 -->
+        <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+            <h2 class="text-2xl font-black text-stone-900 flex items-center gap-2">今天吃什麼？</h2>
+            <div class="bg-[#fcfbfa] border border-stone-200 rounded-lg p-4 text-center my-3 min-h-[100px] flex flex-col justify-center items-center relative">
+                <div id="luckySlotContainer" class="w-full">
+                    <div id="luckyDefaultText" class="text-stone-400">
+                        <p class="text-lg font-medium">點擊下方按鈕開始隨機抽籤</p>
+                    </div>
+                    <div id="luckyResult" class="hidden">
+                        <span id="luckyResultCategory" class="inline-block bg-[#822320]/10 text-[#822320] text-sm px-2.5 py-0.5 rounded font-bold mb-1"></span>
+                        <h3 id="luckyResultName" class="text-3xl font-black text-stone-900 tracking-tight mb-2"></h3>
+                        <button id="addLuckyToPlanBtn" class="inline-flex items-center gap-1 text-lg text-red-700 font-bold hover:underline cursor-pointer">
+                            <i class="fa-solid fa-plus"></i> <span>加到每週配餐</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <button onclick="spinLuckyDish()" class="w-full bg-[#822320] hover:bg-[#9c322e] text-white font-black py-3 px-4 rounded-lg shadow transition duration-150 text-xl flex items-center justify-center gap-2">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> <span>幫我選一個！</span>
+            </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+            <div class="flex justify-between items-center flex-wrap gap-2 mb-4">
+                <h2 class="text-2xl font-black text-stone-900">每週配餐排程</h2>
+                <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                    <button onclick="downloadWeeklyPlanCSV()" class="text-base text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1.5 transition" title="下載本週配餐為 Excel CSV 檔">
+                        <i class="fa-solid fa-file-csv text-lg"></i> <span>下載本週配餐</span>
+                    </button>
+                    <span class="text-stone-300 hidden sm:inline">|</span>
+                    <button onclick="clearWeeklyPlan()" class="text-base text-red-600 hover:text-red-800 font-bold flex items-center gap-1 transition">
+                        <i class="fa-solid fa-trash-can"></i> <span>清空配餐</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="space-y-4" id="weeklyPlannerList">
+                <!-- 週一至週日排程清單 (由 JavaScript 動態渲染) -->
+            </div>
+
+            <button onclick="generateShoppingList()" class="mt-6 w-full bg-stone-900 hover:bg-stone-800 text-white font-black py-3.5 px-5 rounded-lg shadow transition flex items-center justify-center gap-2 text-lg">
+                <i class="fa-solid fa-basket-shopping text-amber-400"></i>
+                <span>一鍵生成本週採購清單</span>
+            </button>
+        </div>
+    </section>
+
+    <section class="lg:col-span-5 space-y-5">
+        <div class="bg-white rounded-xl border border-stone-200 p-4 shadow-sm">
+            <div class="flex flex-col gap-3">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+                        <i class="fa-solid fa-magnifying-glass text-base"></i>
+                    </span>
+                    <input type="text" id="searchInput" oninput="filterMenu()" placeholder="輸入菜名" class="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#822320] focus:bg-white text-lg transition">
+                </div>
+                <button onclick="openAddDishModal()" class="w-full bg-[#822320]/10 hover:bg-[#822320]/20 text-[#822320] font-black py-2.5 px-4 rounded-lg transition flex items-center justify-center gap-1.5 text-lg">
+                    <i class="fa-solid fa-plus"></i> <span>自訂新菜色</span>
+                </button>
+            </div>
+
+            <div class="mt-4">
+                <div class="flex flex-wrap gap-2 justify-start" id="categoryTagsContainer">
+                </div>
+            </div>
+
+            <div class="mt-4 border-t border-stone-200 divide-y divide-stone-150 max-h-[850px] overflow-y-auto pr-1" id="menuItemsList">
+            </div>
+            
+            <div id="emptyState" class="hidden text-center py-8">
+                <p class="text-lg text-stone-400 font-bold">沒有符合條件的菜色</p>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<div id="dayDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-3 sm:p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
+        <div class="bg-[#822320] text-white p-4 relative shrink-0">
+            <h3 id="dayDetailModalTitle" class="text-2xl font-black">週一詳細配餐</h3>
+            <button onclick="closeDayDetailModal()" class="absolute top-4 right-4 text-white/80 hover:text-white text-2xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="p-5 overflow-y-auto flex-grow space-y-5 bg-[#fcfbfa]">
+            <div>
+                <h4 class="text-lg font-black text-amber-800 border-b-2 border-amber-200 pb-1 mb-2.5 flex items-center gap-1.5">
+                    <i class="fa-solid fa-sun"></i> <span>中午 Lunch</span>
+                </h4>
+                <div id="detailLunchList" class="grid grid-cols-1 md:grid-cols-2 gap-2.5"></div>
+            </div>
+            <div>
+                <h4 class="text-lg font-black text-red-700 border-b-2 border-red-200 pb-1 mb-2.5 flex items-center gap-1.5">
+                    <i class="fa-solid fa-moon"></i> <span>晚餐 Dinner</span>
+                </h4>
+                <div id="detailDinnerList" class="grid grid-cols-1 md:grid-cols-2 gap-2.5"></div>
+            </div>
+        </div>
+        <div class="bg-stone-100 px-5 py-3 flex justify-end border-t border-stone-200 shrink-0">
+            <button onclick="closeDayDetailModal()" class="bg-stone-300 hover:bg-stone-400 text-stone-800 font-bold py-2 px-5 rounded-lg text-base transition">
+                關閉
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="shoppingListModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all flex flex-col max-h-[80vh]">
+        <div class="bg-[#822320] text-white p-4 relative">
+            <h3 class="text-2xl font-black">本週食材採購清單</h3>
+            <button onclick="closeShoppingListModal()" class="absolute top-4 right-4 text-white/80 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="p-4 overflow-y-auto flex-grow space-y-2" id="shoppingListContent"></div>
+        <div class="bg-stone-100 px-4 py-3 flex gap-2 justify-end border-t border-stone-200">
+            <button onclick="copyShoppingListText()" class="bg-white border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold py-2 px-4 rounded-lg text-base transition flex items-center gap-1.5">
+                <i class="fa-solid fa-copy"></i> <span>複製清單文字</span>
+            </button>
+            <button onclick="closeShoppingListModal()" class="bg-[#822320] text-white hover:bg-[#9c322e] font-bold py-2 px-4 rounded-lg text-base transition">
+                關閉
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="dishModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden transform transition-all">
+        <div class="bg-[#822320] text-white p-5 flex justify-between items-center">
+            <h3 id="modalTitle" class="text-xl font-bold">編輯菜色</h3>
+            <button onclick="closeDishModal()" class="text-white/80 hover:text-white text-2xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <form id="dishForm" onsubmit="saveDish(event)" class="p-5 space-y-4">
+            <input type="hidden" id="editDishId">
+            <div>
+                <label class="block text-base font-bold text-stone-500 mb-1">菜色名稱 *</label>
+                <input type="text" id="formDishName" required class="w-full p-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#822320] text-lg">
+            </div>
+            <div>
+                <label class="block text-base font-bold text-stone-500 mb-1">分類 *</label>
+                <select id="formCategory" required class="w-full p-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#822320] text-lg">
+                </select>
+            </div>
+            <div>
+                <label class="block text-base font-bold text-stone-500 mb-1">推薦食材原料 (以逗號分隔)</label>
+                <input type="text" id="formIngredients" placeholder="例如：牛肉, 蔥, 辣椒" class="w-full p-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#822320] text-lg">
+            </div>
+            <div>
+                <label class="block text-base font-bold text-stone-500 mb-1">食譜網址 (選填)</label>
+                <input type="url" id="formRecipeUrl" placeholder="https://..." class="w-full p-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#822320] text-lg">
+            </div>
+            <div class="flex gap-2 justify-end pt-2">
+                <button type="button" onclick="closeDishModal()" class="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-2.5 px-4 rounded-lg text-base transition">取消</button>
+                <button type="submit" class="bg-[#822320] hover:bg-[#9c322e] text-white font-bold py-2.5 px-5 rounded-lg text-base transition shadow">儲存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="planSelectorModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-xs w-full overflow-hidden transform transition-all">
+        <div class="p-5">
+            <h3 class="text-xl font-bold text-stone-900 mb-0.5">安排配餐時段</h3>
+            <p id="planSelectorDishName" class="text-2xl font-black text-[#822320] mb-4"></p>
+            
+            <div class="grid grid-cols-2 gap-3 mb-5">
+                <div>
+                    <label class="block text-base font-bold text-stone-500 mb-1">星期</label>
+                    <select id="planSelectDay" class="w-full p-2.5 border border-stone-200 rounded-lg focus:ring-[#822320] text-lg">
+                        <option value="Mon">週一 Monday</option>
+                        <option value="Tue">週二 Tuesday</option>
+                        <option value="Wed">週三 Wednesday</option>
+                        <option value="Thu">週四 Thursday</option>
+                        <option value="Fri">週五 Friday</option>
+                        <option value="Sat">週六 Saturday</option>
+                        <option value="Sun">週日 Sunday</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-base font-bold text-stone-500 mb-1">餐別</label>
+                    <select id="planSelectMeal" class="w-full p-2.5 border border-stone-200 rounded-lg focus:ring-[#822320] text-lg">
+                        <option value="Lunch">中午 Lunch</option>
+                        <option value="Dinner">晚餐 Dinner</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex gap-2 justify-end">
+                <button onclick="closePlanSelectorModal()" class="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-2.5 px-4 rounded-lg text-base transition">取消</button>
+                <button onclick="confirmAddToPlan()" class="bg-[#822320] hover:bg-[#9c322e] text-white font-bold py-2.5 px-5 rounded-lg text-base transition shadow">確認</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="customConfirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden transform transition-all p-6">
+        <div class="flex items-start gap-3">
+            <span class="text-red-700 text-2xl mt-0.5"><i class="fa-solid fa-circle-question"></i></span>
+            <div>
+                <h3 class="text-xl font-black text-stone-900 mb-2">確認執行</h3>
+                <p id="confirmMessageText" class="text-base text-stone-600 leading-relaxed"></p>
+            </div>
+        </div>
+        <div class="flex gap-2.5 justify-end mt-6">
+            <button onclick="closeConfirmModal(false)" class="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-2 px-4 rounded-lg text-base transition">取消</button>
+            <button onclick="closeConfirmModal(true)" class="bg-[#822320] hover:bg-[#9c322e] text-white font-bold py-2 px-5 rounded-lg text-base transition shadow">確認</button>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST 提示訊息 -->
+<div id="toast" class="fixed bottom-4 right-4 z-50 bg-stone-900 text-white py-3.5 px-6 rounded-lg shadow-xl flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none text-base">
+    <span id="toastIcon" class="text-amber-400"><i class="fa-solid fa-circle-check"></i></span>
+    <span id="toastMessage" class="font-bold"></span>
+</div>
+
+<script>
+const CATEGORIES = [
+    { id: "海鮮", zh: "海鮮" }, { id: "雞肉", zh: "雞肉" }, { id: "牛肉", zh: "牛肉" },
+    { id: "豬肉", zh: "豬肉" }, { id: "豆類", zh: "豆類" }, { id: "蔬菜", zh: "蔬菜" },
+    { id: "混炒", zh: "混炒" }, { id: "簡餐", zh: "簡餐" }, { id: "早餐", zh: "早餐" }, { id: "湯", zh: "湯" }
+];
+
+const DAY_LABELS = {
+    Mon: "週一 Monday", Tue: "週二 Tuesday", Wed: "週三 Wednesday",
+    Thu: "週四 Thursday", Fri: "週五 Friday", Sat: "週六 Saturday", Sun: "週日 Sunday"
+};
+
+const DAY_BG_COLORS = {
+    Mon: "bg-[#f3ece3]", Tue: "bg-[#e3ede4]", Wed: "bg-[#e3e9ed]",
+    Thu: "bg-[#eae3ed]", Fri: "bg-[#ede3e3]", Sat: "bg-[#f5eedc]", Sun: "bg-[#ebebe3]"
+};
+
+const BUILT_IN_DATABASE = [
+    { id: 1, name: "牛肉捲餅", category1: "簡餐", ingredients: "牛肉, 捲餅皮, 甜麵醬, 大蔥", recipeUrl: "" },
+    { id: 2, name: "牛肉麵", category1: "簡餐", ingredients: "牛肉, 麵條, 紅燒湯頭, 青江菜, 酸菜", recipeUrl: "" },
+    { id: 3, name: "佛蒙特咖哩飯", category1: "簡餐", ingredients: "咖哩塊, 雞肉, 馬鈴薯, 紅蘿蔔, 洋蔥", recipeUrl: "" },
+    { id: 4, name: "洋蔥雞肉炒烏龍", category1: "簡餐", ingredients: "烏龍麵, 雞肉, 洋蔥, 香菇, 高麗菜", recipeUrl: "" },
+    { id: 5, name: "河粉", category1: "簡餐", ingredients: "河粉, 牛肉, 豆芽菜, 九層塔, 檸檬", recipeUrl: "" },
+    { id: 6, name: "水餃", category1: "簡餐", ingredients: "水餃, 醬油, 醋", recipeUrl: "" },
+    { id: 7, name: "親子丼", category1: "簡餐", ingredients: "雞肉, 雞蛋, 洋蔥, 柴魚醬油", recipeUrl: "" },
+    { id: 8, name: "絲瓜麵線", category1: "蔬菜", ingredients: "絲瓜, 麵線, 薑絲, 枸杞", recipeUrl: "" },
+    { id: 9, name: "涼麵", category1: "簡餐", ingredients: "油麵, 小黃瓜絲, 芝麻醬, 蒜泥", recipeUrl: "" },
+    { id: 10, name: "蔥爆牛肉", category1: "牛肉", ingredients: "牛肉, 蔥段, 辣椒, 蒜頭, 醬油", recipeUrl: "" },
+    { id: 11, name: "紅燒牛腩煲", category1: "牛肉", ingredients: "牛腩, 白蘿蔔, 紅蘿蔔, 醬油", recipeUrl: "" },
+    { id: 12, name: "皮蛋豆腐", category1: "豆類", ingredients: "皮蛋, 豆腐, 蔥花, 柴魚片, 醬油膏", recipeUrl: "" },
+    { id: 13, name: "麻婆豆腐", category1: "豆類", ingredients: "豆腐, 豬絞肉, 辣豆瓣醬", recipeUrl: "" },
+    { id: 14, name: "紅燒豆腐", category1: "豆類", ingredients: "豆腐, 蔥段, 醬油, 蒜頭", recipeUrl: "" },
+    { id: 15, name: "蝦仁洋蔥炒蛋", category1: "海鮮", ingredients: "蝦仁, 雞蛋, 洋蔥", recipeUrl: "" },
+    { id: 16, name: "蔥淋魚片", category1: "海鮮", ingredients: "鮮魚片, 蔥絲, 薑絲", recipeUrl: "" },
+    { id: 17, name: "煎小卷", category1: "海鮮", ingredients: "小卷, 薑絲, 醬油", recipeUrl: "" },
+    { id: 18, name: "炒水蓮", category1: "蔬菜", ingredients: "水蓮, 薑絲, 枸杞", recipeUrl: "" },
+    { id: 19, name: "乾扁四季豆", category1: "蔬菜", ingredients: "四季豆, 豬絞肉, 蒜頭", recipeUrl: "" },
+    { id: 20, name: "客家小炒", category1: "混炒", ingredients: "五花肉, 豆乾, 魷魚, 芹菜, 蔥段", recipeUrl: "" },
+    { id: 21, name: "鳳梨蝦球", category1: "混炒", ingredients: "蝦仁, 鳳梨罐頭,美乃滋", recipeUrl: "" },
+    { id: 22, name: "排骨酥湯", category1: "湯", ingredients: "排骨酥, 冬瓜, 香菜", recipeUrl: "" },
+    { id: 23, name: "燒餅油條", category1: "早餐", ingredients: "燒餅, 油條", recipeUrl: "" },
+    { id: 24, name: "蛋餅", category1: "早餐", ingredients: "蛋餅皮, 雞蛋", recipeUrl: "" }
+];
+
+let menuDatabase = [];
+let weeklyPlan = {
+    Mon: { Lunch: [], Dinner: [] }, Tue: { Lunch: [], Dinner: [] }, Wed: { Lunch: [], Dinner: [] },
+    Thu: { Lunch: [], Dinner: [] }, Fri: { Lunch: [], Dinner: [] }, Sat: { Lunch: [], Dinner: [] }, Sun: { Lunch: [], Dinner: [] }
+};
+let selectedCategory = ''; 
+let activeDetailDay = ''; 
+let recentSpunIds = [];
+
+// 全局拖放與自訂確認狀態
+let draggedItemInfo = null;
+let currentConfirmResolve = null;
+
+window.onload = function() {
+    const cachedMenu = localStorage.getItem('muji_menu_db');
+    const cachedPlan = localStorage.getItem('muji_weekly_plan');
+
+    if (cachedMenu) {
+        menuDatabase = JSON.parse(cachedMenu);
+    } else {
+        menuDatabase = [...BUILT_IN_DATABASE];
+        localStorage.setItem('muji_menu_db', JSON.stringify(menuDatabase));
+    }
+
+    if (cachedPlan) {
+        try {
+            const rawPlan = JSON.parse(cachedPlan);
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            days.forEach(d => {
+                weeklyPlan[d] = {
+                    Lunch: Array.isArray(rawPlan[d]?.Lunch) ? rawPlan[d].Lunch : (rawPlan[d]?.Lunch ? [rawPlan[d].Lunch] : []),
+                    Dinner: Array.isArray(rawPlan[d]?.Dinner) ? rawPlan[d].Dinner : (rawPlan[d]?.Dinner ? [rawPlan[d].Dinner] : [])
+                };
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    autoFetchLocalCSV();
+    renderWeeklyPlanner();
+    renderCategoryFilters();
+    filterMenu();
+};
+
+function showCustomConfirm(message) {
+    return new Promise((resolve) => {
+        document.getElementById('confirmMessageText').textContent = message;
+        document.getElementById('customConfirmModal').classList.remove('hidden');
+        currentConfirmResolve = resolve;
+    });
+}
+
+function closeConfirmModal(result) {
+    document.getElementById('customConfirmModal').classList.add('hidden');
+    if (currentConfirmResolve) {
+        currentConfirmResolve(result);
+        currentConfirmResolve = null;
+    }
+}
+
+function autoFetchLocalCSV() {
+    fetch('菜單靈感副本_2.csv')
+        .then(res => res.ok ? res.text() : fetch('菜單靈感副本.csv').then(r => r.text()))
+        .then(csvText => {
+            Papa.parse(csvText, {
+                header: false,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    processParsedCSV(results.data);
+                }
+            });
+        })
+        .catch(() => console.log("使用快取數據"));
+}
+
+function processParsedCSV(rows) {
+    if (!rows || rows.length === 0) return;
+
+    let headerRowIndex = -1;
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].some(cell => typeof cell === 'string' && (cell.includes('名稱') || cell.includes('菜名') || cell.includes('種類')))) {
+            headerRowIndex = i;
+            break;
+        }
+    }
+    if (headerRowIndex === -1) headerRowIndex = 0;
+
+    const headers = rows[headerRowIndex].map(h => String(h || '').trim());
+    const dataRows = rows.slice(headerRowIndex + 1);
+
+    let nameIdx = headers.findIndex(h => h.includes('名稱') || h.includes('菜名') || h.includes('name'));
+    let cat1Idx = headers.findIndex(h => h.includes('種類1') || h.includes('分類') || h.includes('種類'));
+    let ingIdx = headers.findIndex(h => h.includes('食材') || h.includes('材料') || h.includes('原料'));
+
+    if (nameIdx === -1) nameIdx = 0;
+    if (cat1Idx === -1) cat1Idx = headers.length > 1 ? 1 : -1;
+    if (ingIdx === -1) ingIdx = headers.length > 2 ? 2 : -1;
+
+    const parsedDishes = [];
+    dataRows.forEach((row, idx) => {
+        const name = nameIdx !== -1 && row[nameIdx] ? String(row[nameIdx]).trim() : "";
+        if (name && name !== "菜名" && name !== "名稱") {
+            const cat1Raw = cat1Idx !== -1 && row[cat1Idx] ? String(row[cat1Idx]).trim() : "混炒";
+            const ingredients = ingIdx !== -1 && row[ingIdx] ? String(row[ingIdx]).trim() : "";
+            
+            let cleanCat = "混炒";
+            const matched = CATEGORIES.find(c => cat1Raw.includes(c.id) || c.id.includes(cat1Raw));
+            if (matched) cleanCat = matched.id;
+
+            parsedDishes.push({
+                id: Date.now() + idx,
+                name: name,
+                category1: cleanCat,
+                ingredients: ingredients,
+                recipeUrl: ""
+            });
+        }
+    });
+
+    if (parsedDishes.length > 0) {
+        menuDatabase = parsedDishes;
+        localStorage.setItem('muji_menu_db', JSON.stringify(menuDatabase));
+        renderCategoryFilters();
+        filterMenu();
+        showToast("成功匯入菜色！");
+    }
+}
+
+function handleCSVUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    Papa.parse(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: function(results) { processParsedCSV(results.data); }
+    });
+}
+
+function showToast(message, icon = "fa-circle-check") {
+    const toast = document.getElementById('toast');
+    document.getElementById('toastMessage').textContent = message;
+    document.getElementById('toastIcon').innerHTML = `<i class="fa-solid ${icon}"></i>`;
+    toast.classList.remove('translate-y-20', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+    setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+    }, 2000);
+}
+
+function renderCategoryFilters() {
+    const container = document.getElementById('categoryTagsContainer');
+    let html = `
+    <button onclick="selectCategory('')" class="px-3 py-1.5 rounded-lg text-lg font-bold border transition ${!selectedCategory ? 'bg-[#822320] text-white border-[#822320] shadow-sm' : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'}">全部</button>
+    `;
+    CATEGORIES.forEach(cat => {
+        const isSelected = selectedCategory === cat.id;
+        html += `
+        <button onclick="selectCategory('${cat.id}')" class="px-3 py-1.5 rounded-lg text-lg font-bold border transition ${isSelected ? 'bg-[#822320] text-white border-[#822320] shadow-sm' : 'bg-white text-[#822320] border-stone-200 hover:border-[#822320]/30'}">${cat.zh}</button>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function selectCategory(catId) {
+    selectedCategory = catId;
+    renderCategoryFilters();
+    filterMenu();
+}
+
+function filterMenu() {
+    const query = document.getElementById('searchInput').value.toLowerCase().trim();
+    const filtered = menuDatabase.filter(dish => {
+        return (!query || dish.name.toLowerCase().includes(query)) && (!selectedCategory || dish.category1 === selectedCategory);
+    });
+    renderMinimalMenu(filtered);
+}
+
+function renderMinimalMenu(dishes) {
+    const container = document.getElementById('menuItemsList');
+    const emptyState = document.getElementById('emptyState');
+
+    if (dishes.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+    }
+    emptyState.classList.add('hidden');
+
+    container.innerHTML = dishes.map(dish => {
+        const hasRecipe = !!dish.recipeUrl;
+        return `
+        <div class="py-3 border-b border-stone-200 grid grid-cols-1 sm:grid-cols-12 items-center gap-2 sm:gap-4 hover:bg-stone-50/50 transition w-full">
+            <div class="sm:col-span-8 flex items-center flex-wrap gap-2 min-w-0 w-full">
+                <span class="text-2xl font-black text-stone-900 break-words leading-tight">${dish.name}</span>
+                <span class="px-2.5 py-0.5 text-base font-bold rounded bg-[#822320]/10 text-[#822320] shrink-0">${dish.category1}</span>
+                ${hasRecipe ? `<span class="text-sm font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200 shrink-0">食譜</span>` : ''}
+            </div>
+            <div class="sm:col-span-4 flex items-center justify-end gap-1.5 bg-[#f4f0ea] p-1.5 rounded-xl w-full sm:w-auto">
+                <button onclick="openRecipeUrl('${dish.recipeUrl}')" class="flex-1 sm:flex-none w-11 h-11 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center transition ${hasRecipe ? 'text-[#822320] hover:bg-stone-200 bg-white shadow-sm sm:shadow-none' : 'text-stone-300 pointer-events-none'}" title="打開線上食譜">
+                    <i class="fa-solid fa-receipt text-xl sm:text-base"></i>
+                </button>
+                <button onclick="openEditDish(${dish.id})" class="flex-1 sm:flex-none w-11 h-11 sm:w-9 sm:h-9 rounded-lg text-stone-600 bg-white sm:bg-transparent shadow-sm sm:shadow-none flex items-center justify-center transition" title="編輯食材">
+                    <i class="fa-solid fa-pen text-xl sm:text-base"></i>
+                </button>
+                <button onclick="deleteDish(${dish.id})" class="flex-1 sm:flex-none w-11 h-11 sm:w-9 sm:h-9 rounded-lg text-stone-400 hover:text-red-700 bg-white sm:bg-transparent shadow-sm sm:shadow-none flex items-center justify-center transition" title="刪除">
+                    <i class="fa-solid fa-trash text-xl sm:text-base"></i>
+                </button>
+                <button onclick="openPlanSelector(${dish.id})" class="flex-1 sm:flex-none w-11 h-11 sm:w-9 sm:h-9 rounded-lg bg-[#822320] text-white hover:bg-[#9c322e] flex items-center justify-center transition shadow" title="排入配餐">
+                    <i class="fa-solid fa-plus text-xl sm:text-base"></i>
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function openRecipeUrl(url) { if (url) window.open(url, '_blank'); }
+
+function handleDragStart(e, day, meal, index) {
+    draggedItemInfo = { day, meal, index };
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => {
+        e.target.classList.add('opacity-40');
+    }, 0);
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('opacity-40');
+    draggedItemInfo = null;
+    document.querySelectorAll('.drop-target-box').forEach(el => {
+        el.classList.remove('border-[#822320]', 'bg-[#822320]/5', 'border-dashed');
+    });
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnter(e, element) {
+    e.preventDefault();
+    element.classList.add('border-[#822320]', 'bg-[#822320]/5', 'border-dashed');
+}
+
+function handleDragLeave(e, element) {
+    element.classList.remove('border-[#822320]', 'bg-[#822320]/5', 'border-dashed');
+}
+
+function handleDrop(e, targetDay, targetMeal) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-[#822320]', 'bg-[#822320]/5', 'border-dashed');
+
+    if (!draggedItemInfo) return;
+
+    const { day: srcDay, meal: srcMeal, index: srcIdx } = draggedItemInfo;
+
+    // 避免拖到同一個餐別
+    if (srcDay === targetDay && srcMeal === targetMeal) return;
+
+    const item = weeklyPlan[srcDay][srcMeal][srcIdx];
+    if (!item) return;
+
+    // 從原時段移出
+    weeklyPlan[srcDay][srcMeal].splice(srcIdx, 1);
+    
+    // 放入新時段
+    if (!weeklyPlan[targetDay][targetMeal]) weeklyPlan[targetDay][targetMeal] = [];
+    weeklyPlan[targetDay][targetMeal].push(item);
+
+    // 儲存並渲染
+    localStorage.setItem('muji_weekly_plan', JSON.stringify(weeklyPlan));
+    renderWeeklyPlanner();
+    
+    const dayZh = { Mon: "週一", Tue: "週二", Wed: "週三", Thu: "週四", Fri: "週五", Sat: "週六", Sun: "週日" }[targetDay];
+    const mealZh = targetMeal === 'Lunch' ? '中午' : '晚餐';
+    showToast(`已移動「${item.name}」至 ${dayZh} ${mealZh}！`);
+}
+
+function renderWeeklyPlanner() {
+    const container = document.getElementById('weeklyPlannerList');
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    container.innerHTML = days.map(day => {
+        const lunchDishes = weeklyPlan[day].Lunch || [];
+        const dinnerDishes = weeklyPlan[day].Dinner || [];
+        return `
+        <div class="rounded-xl border border-stone-200 p-4 ${DAY_BG_COLORS[day]} hover:shadow transition duration-150 cursor-pointer" onclick="openDayDetailModal('${day}')">
+            <div class="text-xl sm:text-2xl font-black text-stone-700 mb-3 flex justify-between items-center">
+                <span>${DAY_LABELS[day]}</span>
+                <span class="text-base bg-white/60 text-stone-500 font-bold px-2.5 py-0.5 rounded border border-stone-300/40">詳情 ↗</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" onclick="event.stopPropagation()">
+                <!-- 中午 (放開容器 Zone) -->
+                <div class="bg-[#fbfbfa] p-3 rounded-lg border border-stone-200/60 shadow-sm transition-all duration-150 drop-target-box"
+                     ondragover="handleDragOver(event)"
+                     ondragenter="handleDragEnter(event, this)"
+                     ondragleave="handleDragLeave(event, this)"
+                     ondrop="handleDrop(event, '${day}', 'Lunch')">
+                    <span class="text-base font-black text-amber-700 block mb-1.5">中午 Lunch</span>
+                    <div class="space-y-1.5">
+                        ${lunchDishes.length > 0 ? lunchDishes.map((dish, idx) => {
+                            const target = menuDatabase.find(d => d.id === dish.id || d.name === dish.name);
+                            const url = target ? target.recipeUrl : '';
+                            return `
+                            <div class="flex items-center justify-between bg-white p-2 px-2.5 rounded border border-stone-100 text-lg gap-1.5 select-none transition hover:bg-stone-50 active:bg-stone-100"
+                                 draggable="true"
+                                 ondragstart="handleDragStart(event, '${day}', 'Lunch', ${idx})"
+                                 ondragend="handleDragEnd(event)">
+                                <div class="flex items-center gap-1.5 flex-grow min-w-0">
+                                    <!-- 拖曳抓取手勢與把手圖示 -->
+                                    <span class="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing shrink-0 pr-1 text-sm flex items-center">
+                                        <i class="fa-solid fa-grip-vertical"></i>
+                                    </span>
+                                    <span onclick="event.stopPropagation(); clickPlanDish(${dish.id}, '${dish.name.replace(/'/g, "\\'")}')" class="font-bold text-stone-800 hover:text-[#822320] hover:underline cursor-pointer truncate" title="點擊立即編輯/查看食材">${dish.name}</span>
+                                    ${url ? `<button onclick="event.stopPropagation(); openRecipeUrl('${url}')" class="text-[#822320] hover:bg-stone-200/60 p-0.5 px-1 rounded transition text-base shrink-0" title="立即開啟線上食譜"><i class="fa-solid fa-receipt"></i></button>` : ''}
+                                </div>
+                                <button onclick="removeFromPlan('${day}', 'Lunch', ${idx})" class="text-stone-300 hover:text-red-600 pl-1 shrink-0"><i class="fa-solid fa-circle-xmark text-xl"></i></button>
+                            </div>
+                            `;
+                        }).join('') : '<span class="text-base text-stone-400 italic block">無安排</span>'}
+                    </div>
+                </div>
+                <!-- 晚餐 (放開容器 Zone) -->
+                <div class="bg-[#fbfbfa] p-3 rounded-lg border border-stone-200/60 shadow-sm transition-all duration-150 drop-target-box"
+                     ondragover="handleDragOver(event)"
+                     ondragenter="handleDragEnter(event, this)"
+                     ondragleave="handleDragLeave(event, this)"
+                     ondrop="handleDrop(event, '${day}', 'Dinner')">
+                    <span class="text-base font-black text-red-600 block mb-1.5">晚餐 Dinner</span>
+                    <div class="space-y-1.5">
+                        ${dinnerDishes.length > 0 ? dinnerDishes.map((dish, idx) => {
+                            const target = menuDatabase.find(d => d.id === dish.id || d.name === dish.name);
+                            const url = target ? target.recipeUrl : '';
+                            return `
+                            <div class="flex items-center justify-between bg-white p-2 px-2.5 rounded border border-stone-100 text-lg gap-1.5 select-none transition hover:bg-stone-50 active:bg-stone-100"
+                                 draggable="true"
+                                 ondragstart="handleDragStart(event, '${day}', 'Dinner', ${idx})"
+                                 ondragend="handleDragEnd(event)">
+                                <div class="flex items-center gap-1.5 flex-grow min-w-0">
+                                    <!-- 拖曳抓取手勢與把手圖示 -->
+                                    <span class="text-stone-300 hover:text-stone-500 cursor-grab active:cursor-grabbing shrink-0 pr-1 text-sm flex items-center">
+                                        <i class="fa-solid fa-grip-vertical"></i>
+                                    </span>
+                                    <span onclick="event.stopPropagation(); clickPlanDish(${dish.id}, '${dish.name.replace(/'/g, "\\'")}')" class="font-bold text-stone-800 hover:text-[#822320] hover:underline cursor-pointer truncate" title="點擊立即編輯/查看食材">${dish.name}</span>
+                                    ${url ? `<button onclick="event.stopPropagation(); openRecipeUrl('${url}')" class="text-[#822320] hover:bg-stone-200/60 p-0.5 px-1 rounded transition text-base shrink-0" title="立即開啟線上食譜"><i class="fa-solid fa-receipt"></i></button>` : ''}
+                                </div>
+                                <button onclick="removeFromPlan('${day}', 'Dinner', ${idx})" class="text-stone-300 hover:text-red-600 pl-1 shrink-0"><i class="fa-solid fa-circle-xmark text-xl"></i></button>
+                            </div>
+                            `;
+                        }).join('') : '<span class="text-base text-stone-400 italic block">無安排</span>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function clickPlanDish(dishId, dishName) {
+    let dish = menuDatabase.find(d => d.id === dishId);
+    if (!dish && dishName) { dish = menuDatabase.find(d => d.name === dishName); }
+    if (dish) { openEditDish(dish.id); } 
+    else { showToast("找不到對應的菜色資料！", "fa-triangle-exclamation"); }
+}
+
+function openDayDetailModal(day) {
+    activeDetailDay = day;
+    document.getElementById('dayDetailModalTitle').textContent = DAY_LABELS[day] + " 詳細配餐";
+    
+    const formatList = (dishes, type) => {
+        if (dishes.length === 0) return `<p class="text-base text-stone-400 italic py-2 pl-2">無安排配餐</p>`;
+        return dishes.map((dish, idx) => {
+            const masterDish = menuDatabase.find(d => d.id === dish.id || d.name === dish.name);
+            const displayIngredients = masterDish ? (masterDish.ingredients || '未設定食材原料') : (dish.ingredients || '未設定食材原料');
+
+            return `
+            <div class="flex items-center justify-between bg-white p-3 rounded-lg border border-stone-200 hover:border-[#822320]/40 transition shadow-sm">
+                <div class="flex-grow min-w-0 cursor-pointer" onclick="editDishFromDetailModal(${masterDish ? masterDish.id : dish.id})">
+                    <span class="text-xl font-bold text-stone-900 hover:text-[#822320] underline block truncate leading-tight">${dish.name}</span>
+                    <p class="text-base text-stone-500 mt-1 flex items-start gap-1 break-words">
+                        <i class="fa-solid fa-circle-info mt-1 text-[#822320]/50 shrink-0 text-sm"></i>
+                        <span>${displayIngredients}</span>
+                    </p>
+                </div>
+                <button onclick="removeFromPlan('${day}', '${type}', ${idx}); openDayDetailModal('${day}');" class="text-stone-300 hover:text-red-600 text-lg pl-2 shrink-0 transition" title="自排程移出"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+            `;
+        }).join('');
+    };
+
+    document.getElementById('detailLunchList').innerHTML = formatList(weeklyPlan[day].Lunch, 'Lunch');
+    document.getElementById('detailDinnerList').innerHTML = formatList(weeklyPlan[day].Dinner, 'Dinner');
+    document.getElementById('dayDetailModal').classList.remove('hidden');
+}
+
+function closeDayDetailModal() { activeDetailDay = ''; document.getElementById('dayDetailModal').classList.add('hidden'); }
+function editDishFromDetailModal(dishId) { closeDayDetailModal(); openEditDish(dishId); }
+
+function openPlanSelector(dishId) {
+    const dish = menuDatabase.find(d => d.id === dishId);
+    if (!dish) return;
+    document.getElementById('planSelectorDishName').textContent = `「${dish.name}」`;
+    window.pendingPlanDish = dish;
+    document.getElementById('planSelectorModal').classList.remove('hidden');
+}
+function closePlanSelectorModal() { document.getElementById('planSelectorModal').classList.add('hidden'); }
+
+function confirmAddToPlan() {
+    if (!window.pendingPlanDish) return;
+    const day = document.getElementById('planSelectDay').value;
+    const meal = document.getElementById('planSelectMeal').value;
+    if (!weeklyPlan[day][meal]) weeklyPlan[day][meal] = [];
+    if (weeklyPlan[day][meal].length >= 10) return;
+
+    weeklyPlan[day][meal].push({
+        id: window.pendingPlanDish.id, name: window.pendingPlanDish.name, ingredients: window.pendingPlanDish.ingredients || ""
+    });
+    localStorage.setItem('muji_weekly_plan', JSON.stringify(weeklyPlan));
+    renderWeeklyPlanner();
+    closePlanSelectorModal();
+    showToast("已加入配餐排程！");
+}
+
+function removeFromPlan(day, meal, idx) {
+    if (weeklyPlan[day]?.[meal]) {
+        weeklyPlan[day][meal].splice(idx, 1);
+        localStorage.setItem('muji_weekly_plan', JSON.stringify(weeklyPlan));
+        renderWeeklyPlanner();
+    }
+}
+
+// 使用自訂確認對話盒清空配餐
+async function clearWeeklyPlan() {
+    const confirmClear = await showCustomConfirm("確定要清空整週的配餐排程嗎？這將無法復原。");
+    if (confirmClear) {
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(d => { weeklyPlan[d] = { Lunch: [], Dinner: [] }; });
+        localStorage.setItem('muji_weekly_plan', JSON.stringify(weeklyPlan));
+        renderWeeklyPlanner();
+        showToast("已重設本週配餐排程。");
+    }
+}
+
+function spinLuckyDish() {
+    if (menuDatabase.length === 0) return;
+    document.getElementById('luckyDefaultText').classList.add('hidden');
+    document.getElementById('luckyResult').classList.remove('hidden');
+
+    const resultName = document.getElementById('luckyResultName');
+    const resultCat = document.getElementById('luckyResultCategory');
+    const addBtn = document.getElementById('addLuckyToPlanBtn');
+
+    const coolingSize = Math.min(25, Math.floor(menuDatabase.length / 2.2));
+    let availablePool = menuDatabase.filter(dish => !recentSpunIds.includes(dish.id));
+    if (availablePool.length === 0) { recentSpunIds = []; availablePool = menuDatabase; }
+
+    let timer;
+    timer = setInterval(() => {
+        let rand = menuDatabase[Math.floor(Math.random() * menuDatabase.length)];
+        resultName.textContent = rand.name;
+        resultCat.textContent = rand.category1;
+    }, 65);
+
+    setTimeout(() => {
+        clearInterval(timer);
+        const finalDish = availablePool[Math.floor(Math.random() * availablePool.length)];
+        recentSpunIds.push(finalDish.id);
+        if (recentSpunIds.length > coolingSize) recentSpunIds.shift();
+
+        resultName.textContent = finalDish.name;
+        resultCat.textContent = finalDish.category1;
+        addBtn.onclick = function() { openPlanSelector(finalDish.id); };
+        showToast("美味選定！", "fa-wand-magic-sparkles");
+    }, 1200);
+}
+
+function openAddDishModal() {
+    document.getElementById('modalTitle').textContent = '自訂新菜色';
+    document.getElementById('editDishId').value = "";
+    document.getElementById('dishForm').reset();
+    populateCategorySelect();
+    document.getElementById('dishModal').classList.remove('hidden');
+}
+
+function openEditDish(dishId) {
+    const dish = menuDatabase.find(d => d.id === dishId);
+    if (!dish) return;
+    document.getElementById('modalTitle').textContent = '編輯菜色';
+    document.getElementById('editDishId').value = dish.id;
+    document.getElementById('formDishName').value = dish.name;
+    document.getElementById('formIngredients').value = dish.ingredients || '';
+    document.getElementById('formRecipeUrl').value = dish.recipeUrl || '';
+    populateCategorySelect(dish.category1);
+    document.getElementById('dishModal').classList.remove('hidden');
+}
+
+function populateCategorySelect(selectedId = '') {
+    document.getElementById('formCategory').innerHTML = CATEGORIES.map(c => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.zh}</option>`).join('');
+}
+function closeDishModal() { document.getElementById('dishModal').classList.add('hidden'); }
+
+function saveDish(event) {
+    event.preventDefault();
+    const id = document.getElementById('editDishId').value;
+    const name = document.getElementById('formDishName').value.trim();
+    const category1 = document.getElementById('formCategory').value;
+    const ingredients = document.getElementById('formIngredients').value.trim();
+    const recipeUrl = document.getElementById('formRecipeUrl').value.trim();
+
+    if (id) {
+        const idx = menuDatabase.findIndex(d => d.id == id);
+        if (idx !== -1) menuDatabase[idx] = { ...menuDatabase[idx], name, category1, ingredients, recipeUrl };
+    } else {
+        menuDatabase.push({ id: Date.now(), name, category1, ingredients, recipeUrl });
+    }
+    localStorage.setItem('muji_menu_db', JSON.stringify(menuDatabase));
+    closeDishModal();
+    renderCategoryFilters();
+    filterMenu();
+    renderWeeklyPlanner(); 
+    showToast("儲存成功！");
+}
+
+// 使用自訂對話盒刪除菜色
+async function deleteDish(dishId) {
+    const confirmDelete = await showCustomConfirm("確定要刪除這道菜嗎？");
+    if (confirmDelete) {
+        menuDatabase = menuDatabase.filter(d => d.id !== dishId);
+        localStorage.setItem('muji_menu_db', JSON.stringify(menuDatabase));
+        renderCategoryFilters();
+        filterMenu();
+        showToast("已成功刪除該菜色。");
+    }
+}
+
+function getWeekDates() {
+    const today = new Date();
+    const currentDay = today.getDay(); 
+    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + distanceToMonday);
+
+    const dates = {};
+    const daysKey = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        dates[daysKey[i]] = `${yyyy}-${mm}-${dd}`;
+    }
+    return dates;
+}
+
+function downloadWeeklyPlanCSV() {
+    const dates = getWeekDates();
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayNamesZh = { Mon: "週一", Tue: "週二", Wed: "週三", Thu: "週四", Fri: "週五", Sat: "週六", Sun: "週日" };
+    
+    let csvRows = [];
+    csvRows.push(["日期", "星期", "午餐或晚餐", "菜名"].join(","));
+
+    days.forEach(day => {
+        const dateStr = dates[day];
+        const dayZh = dayNamesZh[day];
+
+        const lunchList = weeklyPlan[day].Lunch || [];
+        if (lunchList.length > 0) {
+            lunchList.forEach(dish => { csvRows.push([dateStr, dayZh, "中午", `"${dish.name.replace(/"/g, '""')}"`].join(",")); });
+        } else { csvRows.push([dateStr, dayZh, "中午", "無安排"].join(",")); }
+
+        const dinnerList = weeklyPlan[day].Dinner || [];
+        if (dinnerList.length > 0) {
+            dinnerList.forEach(dish => { csvRows.push([dateStr, dayZh, "晚餐", `"${dish.name.replace(/"/g, '""')}"`].join(",")); });
+        } else { csvRows.push([dateStr, dayZh, "晚餐", "無安排"].join(",")); }
+    });
+
+    const csvContent = "\ufeff" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `本週配餐排程_${dates['Mon']}_至_${dates['Sun']}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("本週配餐 CSV 下載成功！");
+}
+
+function generateShoppingList() {
+    const activeDishes = [];
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+        ['Lunch', 'Dinner'].forEach(slot => {
+            const list = weeklyPlan[day][slot];
+            if (Array.isArray(list)) list.forEach(d => { if (d) activeDishes.push(d); });
+        });
+    });
+
+    if (activeDishes.length === 0) {
+        showToast("本週無任何安排配餐", "fa-triangle-exclamation");
+        return;
+    }
+
+    const countMap = {}; const useMap = {};
+    activeDishes.forEach(dish => {
+        let ingredients = dish.ingredients;
+        if (!ingredients) {
+            const masterDish = menuDatabase.find(d => d.name === dish.name);
+            if (masterDish) ingredients = masterDish.ingredients;
+        }
+        if (ingredients) {
+            ingredients.split(/[,，\+]+/).forEach(item => {
+                const clean = item.trim();
+                if (clean) {
+                    countMap[clean] = (countMap[clean] || 0) + 1;
+                    if (!useMap[clean]) useMap[clean] = [];
+                    if (!useMap[clean].includes(dish.name)) useMap[clean].push(dish.name);
+                }
+            });
+        }
+    });
+
+    const modalContent = document.getElementById('shoppingListContent');
+    const listKeys = Object.keys(countMap);
+
+    if (listKeys.length === 0) {
+        modalContent.innerHTML = `<p class="text-center py-4 text-stone-400 text-lg">未設定任何食材原料。</p>`;
+    } else {
+        modalContent.innerHTML = listKeys.map((ing, idx) => `
+        <label class="flex items-start gap-2.5 p-2 bg-stone-50 hover:bg-stone-100 rounded-lg cursor-pointer transition">
+            <input type="checkbox" class="mt-1 w-6 h-6 rounded border-stone-300 accent-[#822320]">
+            <div class="text-stone-800 text-base">
+                <span class="font-bold text-lg">${ing}</span>
+                <span class="text-sm bg-[#822320]/10 text-[#822320] font-black px-1.5 py-0.5 rounded ml-1.5">需使用 ${countMap[ing]} 次</span>
+                <p class="text-sm text-stone-400 mt-0.5">${useMap[ing].join(', ')}</p>
+            </div>
+        </label>
+        `).join('');
+    }
+    document.getElementById('shoppingListModal').classList.remove('hidden');
+}
+
+function closeShoppingListModal() { document.getElementById('shoppingListModal').classList.add('hidden'); }
+
+function copyShoppingListText() {
+    const listItems = document.getElementById('shoppingListContent').querySelectorAll('label');
+    if (listItems.length === 0) {
+        showToast("無採購清單可複製", "fa-triangle-exclamation");
+        return;
+    }
+    let text = `🛒 【本週食材採購清單】 🛒\n====================\n\n`;
+    listItems.forEach(item => {
+        const nameEl = item.querySelector('.font-bold');
+        const name = nameEl ? nameEl.textContent.trim() : "";
+        const spans = item.querySelectorAll('span');
+        let times = "";
+        spans.forEach(span => { if (span.textContent.includes("需使用")) { times = span.textContent.trim(); } });
+        text += `⬜ [ ] ${name} (${times})\n`;
+    });
+    text += `\n====================\nGenerated by 智慧點菜配餐系統`;
+
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'absolute';
+    area.style.left = '-9999px';
+    area.setAttribute('readonly', ''); 
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, 99999); 
+
+    let successful = false;
+    try { successful = document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(area);
+
+    if (successful) { showToast("已成功複製到剪貼簿！"); } 
+    else {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => showToast("已成功複製到剪貼簿！"))
+                .catch(() => showToast("複製失敗", "fa-triangle-exclamation"));
+        }
+    }
+}
+
+function downloadBackup() {
+    const backupData = { menuDatabase: menuDatabase, weeklyPlan: weeklyPlan, version: "2026.07" };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = "我的智慧配餐本週計劃.json"; a.click();
+    URL.revokeObjectURL(url);
+}
+
+function loadBackup(event) {
+    const file = event.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.menuDatabase && data.weeklyPlan) {
+                menuDatabase = data.menuDatabase; weeklyPlan = data.weeklyPlan;
+                localStorage.setItem('muji_menu_db', JSON.stringify(menuDatabase));
+                localStorage.setItem('muji_weekly_plan', JSON.stringify(weeklyPlan));
+                renderWeeklyPlanner(); renderCategoryFilters(); filterMenu();
+                showToast("還原成功！");
+            }
+        } catch(err) { showToast("非正確備份檔", "fa-triangle-exclamation"); }
+    };
+    reader.readAsText(file);
+}
+</script>
+</body>
+</html>
